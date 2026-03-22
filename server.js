@@ -1,86 +1,74 @@
 const express = require("express");
-const fetch = require("node-fetch");
+const { exec } = require("child_process");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ✅ HOME
 app.get("/", (req, res) => {
-    res.send("SnapFetch API is running 🚀");
+    res.send("🔥 SnapFetch PRO API Running");
 });
 
-// ✅ DOWNLOAD
-app.get("/download", async (req, res) => {
-    try {
-        const videoUrl = req.query.url;
+// ✅ GET VIDEO INFO (ALL QUALITIES)
+app.get("/info", (req, res) => {
+    const url = req.query.url;
 
-        if (!videoUrl) {
-            return res.json({ status: "error", message: "No URL provided" });
-        }
-
-        const response = await fetch("https://api.cobalt.tools/api/json", {
-            method: "POST",
-            headers: {
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Linux; Android 10)",
-                "Origin": "https://cobalt.tools",
-                "Referer": "https://cobalt.tools/"
-            },
-            body: JSON.stringify({
-                url: videoUrl,
-                vCodec: "h264",
-                vQuality: "720",
-                filenamePattern: "basic",
-                isAudioOnly: false
-            })
-        });
-
-        const text = await response.text();
-        console.log("RAW RESPONSE:", text);
-
-        let data;
-        try {
-            data = JSON.parse(text);
-        } catch {
-            return res.json({
-                status: "error",
-                message: "Invalid API response"
-            });
-        }
-
-        // ✅ ALL POSSIBLE FORMATS
-        if (data?.url) {
-            return res.json({ status: "success", video: data.url });
-        }
-
-        if (data?.stream?.url) {
-            return res.json({ status: "success", video: data.stream.url });
-        }
-
-        if (data?.streams?.length > 0) {
-            return res.json({ status: "success", video: data.streams[0].url });
-        }
-
-        if (data?.links?.length > 0) {
-            return res.json({ status: "success", video: data.links[0].url });
-        }
-
-        return res.json({
-            status: "error",
-            message: "Cobalt blocked or unsupported URL"
-        });
-
-    } catch (err) {
-        console.log("ERROR:", err);
-        res.json({
-            status: "error",
-            message: "Server error"
-        });
+    if (!url) {
+        return res.json({ status: "error", message: "No URL" });
     }
+
+    const command = `yt-dlp -J "${url}"`;
+
+    exec(command, (error, stdout) => {
+        if (error) {
+            return res.json({ status: "error", message: "Failed" });
+        }
+
+        try {
+            const data = JSON.parse(stdout);
+
+            const formats = data.formats
+                .filter(f => f.ext === "mp4" && f.height)
+                .map(f => ({
+                    quality: f.height + "p",
+                    url: f.url
+                }));
+
+            res.json({
+                status: "success",
+                title: data.title,
+                thumbnail: data.thumbnail,
+                formats: formats
+            });
+
+        } catch {
+            res.json({ status: "error", message: "Parsing failed" });
+        }
+    });
 });
 
-// ✅ START
+// ✅ DIRECT DOWNLOAD (BEST QUALITY)
+app.get("/download", (req, res) => {
+    const url = req.query.url;
+
+    if (!url) {
+        return res.json({ status: "error", message: "No URL" });
+    }
+
+    const command = `yt-dlp -f best -g "${url}"`;
+
+    exec(command, (error, stdout) => {
+        if (error) {
+            return res.json({ status: "error", message: "Download failed" });
+        }
+
+        res.json({
+            status: "success",
+            video: stdout.trim()
+        });
+    });
+});
+
 app.listen(PORT, () => {
-    console.log("Server running on port " + PORT);
+    console.log("🔥 Server running on port " + PORT);
 });
