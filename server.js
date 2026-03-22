@@ -4,12 +4,12 @@ const fetch = require("node-fetch");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ FIX 1 — HOME ROUTE
+// ✅ HOME ROUTE
 app.get("/", (req, res) => {
     res.send("SnapFetch API is running 🚀");
 });
 
-// ✅ DOWNLOAD ROUTE
+// ✅ DOWNLOAD ROUTE (FIXED)
 app.get("/download", async (req, res) => {
     try {
         const videoUrl = req.query.url;
@@ -21,16 +21,22 @@ app.get("/download", async (req, res) => {
         const response = await fetch("https://api.cobalt.tools/api/json", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Android)"
             },
-            body: JSON.stringify({ url: videoUrl })
+            body: JSON.stringify({
+                url: videoUrl,
+                vCodec: "h264",
+                vQuality: "720",
+                aFormat: "mp3"
+            })
         });
 
         const data = await response.json();
+        console.log("FULL RESPONSE:", data);
 
-        console.log("API RESPONSE:", data);
-
-        // ✅ FIX 2 — HANDLE DIFFERENT RESPONSE FORMATS
+        // ✅ Handle multiple response formats
         if (data && data.url) {
             return res.json({
                 status: "success",
@@ -45,18 +51,28 @@ app.get("/download", async (req, res) => {
             });
         }
 
+        if (data && data.streams && data.streams.length > 0) {
+            return res.json({
+                status: "success",
+                video: data.streams[0].url
+            });
+        }
+
         return res.json({
             status: "error",
-            message: "Failed to fetch video"
+            message: "Extractor failed (site blocked or unsupported)"
         });
 
     } catch (e) {
         console.log("ERROR:", e);
-        res.json({ status: "error", message: "Server error" });
+        res.json({
+            status: "error",
+            message: "Server error"
+        });
     }
 });
 
-// ✅ FIX 3 — USE RENDER PORT
+// ✅ START SERVER (FIXED)
 app.listen(PORT, () => {
     console.log("Server running on port " + PORT);
 });
