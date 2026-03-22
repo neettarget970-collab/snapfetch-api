@@ -1,5 +1,5 @@
 const express = require("express");
-const ytdlp = require("yt-dlp-exec");
+const { exec } = require("child_process");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,59 +10,63 @@ app.get("/", (req, res) => {
 });
 
 // GET ALL QUALITIES
-app.get("/info", async (req, res) => {
-    try {
-        const url = req.query.url;
+app.get("/info", (req, res) => {
+    const url = req.query.url;
 
-        if (!url) {
-            return res.json({ status: "error", message: "No URL" });
+    if (!url) {
+        return res.json({ status: "error", message: "No URL" });
+    }
+
+    const command = `./yt-dlp -J "${url}"`;
+
+    exec(command, (error, stdout) => {
+        if (error) {
+            return res.json({ status: "error", message: "Failed" });
         }
 
-        const data = await ytdlp(url, {
-            dumpSingleJson: true
-        });
+        try {
+            const data = JSON.parse(stdout);
 
-        const formats = data.formats
-            .filter(f => f.ext === "mp4" && f.height)
-            .map(f => ({
-                quality: f.height + "p",
-                url: f.url
-            }));
+            const formats = data.formats
+                .filter(f => f.ext === "mp4" && f.height)
+                .map(f => ({
+                    quality: f.height + "p",
+                    url: f.url
+                }));
 
-        res.json({
-            status: "success",
-            title: data.title,
-            thumbnail: data.thumbnail,
-            formats: formats
-        });
+            res.json({
+                status: "success",
+                title: data.title,
+                thumbnail: data.thumbnail,
+                formats: formats
+            });
 
-    } catch (e) {
-        res.json({ status: "error", message: "Failed to fetch" });
-    }
+        } catch {
+            res.json({ status: "error", message: "Parsing failed" });
+        }
+    });
 });
 
 // DIRECT DOWNLOAD
-app.get("/download", async (req, res) => {
-    try {
-        const url = req.query.url;
+app.get("/download", (req, res) => {
+    const url = req.query.url;
 
-        if (!url) {
-            return res.json({ status: "error", message: "No URL" });
+    if (!url) {
+        return res.json({ status: "error", message: "No URL" });
+    }
+
+    const command = `./yt-dlp -f best -g "${url}"`;
+
+    exec(command, (error, stdout) => {
+        if (error) {
+            return res.json({ status: "error", message: "Download failed" });
         }
-
-        const video = await ytdlp(url, {
-            format: "best",
-            getUrl: true
-        });
 
         res.json({
             status: "success",
-            video: video
+            video: stdout.trim()
         });
-
-    } catch (e) {
-        res.json({ status: "error", message: "Download failed" });
-    }
+    });
 });
 
 app.listen(PORT, () => {
