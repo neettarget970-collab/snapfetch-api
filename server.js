@@ -4,12 +4,12 @@ const fetch = require("node-fetch");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ HOME ROUTE
+// ✅ HOME
 app.get("/", (req, res) => {
     res.send("SnapFetch API is running 🚀");
 });
 
-// ✅ DOWNLOAD ROUTE (FIXED)
+// ✅ DOWNLOAD
 app.get("/download", async (req, res) => {
     try {
         const videoUrl = req.query.url;
@@ -21,50 +21,58 @@ app.get("/download", async (req, res) => {
         const response = await fetch("https://api.cobalt.tools/api/json", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Android)"
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10)",
+                "Origin": "https://cobalt.tools",
+                "Referer": "https://cobalt.tools/"
             },
             body: JSON.stringify({
                 url: videoUrl,
                 vCodec: "h264",
                 vQuality: "720",
-                aFormat: "mp3"
+                filenamePattern: "basic",
+                isAudioOnly: false
             })
         });
 
-        const data = await response.json();
-        console.log("FULL RESPONSE:", data);
+        const text = await response.text();
+        console.log("RAW RESPONSE:", text);
 
-        // ✅ Handle multiple response formats
-        if (data && data.url) {
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch {
             return res.json({
-                status: "success",
-                video: data.url
+                status: "error",
+                message: "Invalid API response"
             });
         }
 
-        if (data && data.stream && data.stream.url) {
-            return res.json({
-                status: "success",
-                video: data.stream.url
-            });
+        // ✅ ALL POSSIBLE FORMATS
+        if (data?.url) {
+            return res.json({ status: "success", video: data.url });
         }
 
-        if (data && data.streams && data.streams.length > 0) {
-            return res.json({
-                status: "success",
-                video: data.streams[0].url
-            });
+        if (data?.stream?.url) {
+            return res.json({ status: "success", video: data.stream.url });
+        }
+
+        if (data?.streams?.length > 0) {
+            return res.json({ status: "success", video: data.streams[0].url });
+        }
+
+        if (data?.links?.length > 0) {
+            return res.json({ status: "success", video: data.links[0].url });
         }
 
         return res.json({
             status: "error",
-            message: "Extractor failed (site blocked or unsupported)"
+            message: "Cobalt blocked or unsupported URL"
         });
 
-    } catch (e) {
-        console.log("ERROR:", e);
+    } catch (err) {
+        console.log("ERROR:", err);
         res.json({
             status: "error",
             message: "Server error"
@@ -72,7 +80,7 @@ app.get("/download", async (req, res) => {
     }
 });
 
-// ✅ START SERVER (FIXED)
+// ✅ START
 app.listen(PORT, () => {
     console.log("Server running on port " + PORT);
 });
